@@ -1,0 +1,18 @@
+
+TODO List for future development :
+
+-- move gradually to have decisions made by #define statements in
+   options.h to be executed via function pointers instead of #if
+   statements. 
+
+
+
+MULTIPATCH-specific todo:
+-- implement run-time parameter file parser because MPMD runs cannot accept command-line arguments
+   -- have it first set just the master-branch-level commandline params
+   -- have it set the multipatch patch id too
+
+
+-- start with master branch then implement new MP stuff ( MP code << master branch code) ; 
+-- 
+

@@ -1,0 +1,94 @@
+
+=============================
+notes on the monopole cleaner
+=============================
+
+this file will contain a brief explanation on the implementation of the monopole cleaner in harm3d (clean_monopoles.c).
+
+the need for such a procedure arises since after an interpolation operation, the resulting magnetic field, B', will no longer satisfy div B' = 0. we can however decompose it into
+
+ B' = B + grad psi,
+
+where B = curl A is the field we want. taking the divergence of the above equation we have
+
+ laplacian psi = div B'
+
+which we can solve for psi and afterwards do
+
+ B = B' - grad psi .
+
+
+we thus want to solve equation 
+
+ F[psi] =  laplacian psi - div B'  =  0    (*)
+
+recall that we are in curved space. therefore:
+
+ div B' = 1/sqrt(h) \partial_i ( sqrt(h) B'^i )
+
+ laplacian psi = 1/sqrt(h) \partial_i ( sqrt(h) h^ij \partial_j psi )
+
+a further complication arises to the fact that the finite differencing stencil we use is rather involved. please check the Zilhão & Noble Warped paper for the full expressions.
+
+we solve (*) using a relaxation procedure. letting r^n be the residual at the nth iteration
+
+ r^n = F[psi^n]
+
+we can obtain a better approximation to the solution through (Newton's method)
+
+ psi^n+1 = psi^n - r^n * ( dF[psi]/dpsi )^-1   (**)
+
+we thus only need to compute dF[psi]/dpsi to get the correcting factor. this is done in the code in the call 'get_fact', under the function 'SOR'.
+
+
+one remaining issue to address is the question of the convergence of this method. we write the equation to solve in the matrix form
+
+ A u = b
+
+in general, it seems that this kind of iterative procedures is stable if the matrix A is diagonally dominant, ie
+
+ |a11| > |a12| + |a13| + ...
+ |a22| > |a21| + |a23| + |a24| + ...
+
+this does not seem to happen in our case. assuming flat space, we get something like
+
+ 24 u^{n+1}_{ijk} = a1 u^n_{ijk-1} + a2 u^n_{ijk+1} + a3 u^n_{ij-1k-1} + ...
+
+where |a1| + |a2| + ... + |a26| = 72
+
+we thus cheat the system by doing (Yosef's suggestion)
+
+    24 u^{n+1}_{ijk} =  ... + 48 u^n_{ijk}  
+<=> u^{n+1}_{ijk} =  ...  + (1 - 1/3) u^n_{ijk}  
+
+and we here have already a diagonally dominant matrix. this is effectively the same as using the SOR (Successive Over Relaxation) method where one does, after (**), the step
+
+  psi^n+1 -> omega * psi^n+1 + (1-omega) * psi^n
+
+with the above trick, we are effectively doing an *Under* Relaxation with omega parameter = 1/3. this is therefore very slow to converge... in any case, through trial an error, we have found that by choosing the parameter omegaSOR_CORN = 1./3 - 0.1 the code seems to be stable.
+
+
+---------------------------------------------------------------------------------------
+
+
+from the user point of view, using the routine currently works as follows: 
+
+ - in decs.h, set the flag CLEAN_MONOPOLES to be 1
+
+ - the routine global_init(), under main, will then call clean_monopoles before
+   the evolution procedure starts. please set desired tolerance levels and
+   maximum number of iterations in global_init.
+
+ - clean_monopoles will read in the B field stored in the primitive array and
+   apply the relaxation procedure described above until either the tolerance
+   level or the maximum number of iteration are reached. the tolerance level is
+   the divb L2 norm.
+
+ - after the call to clean_monopoles, the routine
+   dump_monopole_cleaner(h5filename) is called, which writes the values of the B
+   field upon exiting.
+
+ - procedure is repeated until either global_it_max or tolerance (tol_CORN) are
+   reached.
+
+

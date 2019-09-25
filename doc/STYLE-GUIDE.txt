@@ -1,0 +1,21 @@
+
+
+We will use function pointers to control algorithmic choices.  The selection of 
+functions will be done in header files, in order to minimize the presence of 
+macro/condition statements in the function bodies.  This is to increase the readable of 
+functions so that users may more easily learn how a function works.  The 
+maze of function calls (the algorithm) determined by a set of macro values 
+will be expressed in header files, all in one place, so that users can figure 
+the algorithm out in one place.  
+
+
+Macros should be used to remove repeated blocks of code.  For instance, see the "SET_IZ_PARAMS()" macro 
+defined in metric.h. 
+
+When editing new or existing code, please follow the naming conventions and indentation present.  
+
+-------------------------------
+
+
+
+

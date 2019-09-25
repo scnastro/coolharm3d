@@ -1,0 +1,339 @@
+
+This file contains a rough sketch of what is required to get a run going
+with harm3d, have a notion of what the code does, understand what data it 
+generates, and a little on how to analyze the data.  
+
+The equations of motion solved are described in  Noble, Krolik and Hawley (2009),
+and amount to the equations describing general relativistic magnetohydrodynamics
+in three spatial dimensions, for any spacetime describable by a closed-form metric. 
+Particularly significant characteristics include:  a cooling function, 3rd-order spatial 
+differencing, Lax-Friedrichs and HLLE flux formulae, piecewise parabolic and 
+linear slope limiters, and constraint transport for the magnetic field's "no monopole" constraint. 
+
+Details on the primitive variable solver (the utoprim*.c codes) are given in 
+Noble, Gammie, McKinney, & Del Zanna (2006). 
+
+Most settings are controlled by compile-time parameters set as
+pre-compiler macros in decs.h .  The macros are documented, 
+so please go through them one by one.  As the code currently stands, 
+it is configured to  run  a simulation with the following characteristics:
+
+
+        1) resolution: 96x96x32 (r,th,phi) on a fixed non-uniform mesh w.r.t. (r,th,phi) if you run with the command: 
+             prompt>  ./harm3d 96 96 32 1 1 1  
+	     (see below for how to execute the code and what the runtime arguments mean)
+        2) Moncrief-Fishbone torus ala the one used in the 2-d HARM paper (Gammie, McKinney, Toth 2003) 
+	   with spin a=0.9375. 
+        3) single cpu run
+        4) PPM reconstruction of primitive variables at cell interfaces  and EMFs at cell corners
+        5) No Cooling (so disk will grow larger and hotter with time)
+        6) Kerr-Schild coordinates
+	7) HDF5 binary output ("KDHARM0.NNNNNN.h5") where all the grid functions and simulation 
+	   parameters are stored, so please make sure that a HDF5 library is installed on your system.
+        etc...
+
+Note that harm3d now dynamically allocates memory, so that you may
+specify the global domain size at runtime.  That is why the
+commandline arguments have increased in number, so that you can
+specify the resolution and grid decomposition at runtime.  For
+detailed notes on how to do a sequence of submissions for one
+simulation on a cluster, please read "queue_scripts/SCRIPT.txt" which
+is fairly up-to-date.  Also in that directory, you will find example
+scripts that may be useful for running harm3d on your cluster of
+choice.  Some of the queue scripts may be out-dated as the
+command-line argument change has occurred relatively recently.
+
+The directory "./bin" contains analysis codes, and scripts that will
+not necessarily be useful to everyone.  When comparing a set of C code
+files in the current working directory and those in another directory,
+I usually use the script "./bin/codediff ../other-directory" For
+instace, one would use this if you are comparing different harm3d
+instances, they have to have the same files.
+
+The directory "./python_scripts" contains python scripts useful 
+to visualize harm3d data. 
+
+----------------------------------------------------------------------------------------------------------------------
+
+Harm3d's parallelism is very simple.  The global grid is decomposed into unique domains, the method is 
+called "domain decomposition".  Each core (or processing unit, or "CPU" as used throughout the code) is assigned a domain.  
+A single-core run covers the entire physical domain.  The number of cores equals the number of domains. 
+There are two types of boundary conditions, 1) "physical" (i.e. they are performed at the boundaries of the global 
+domain), 2) MPI (i.e. they are inter-domain conditions that require MPI-communication).   Note, MPI here 
+refers to the "message passing interface" used my clusters world-wide to handle multi-processor jobs. 
+It is used to communicate information between the cores in a simulation run.  Each domain has the same number
+of cells, determined by the definitions  "N1", "N2", "N3" set at the top of decs.h.  Note N1,N2,N3 are the number
+of "physical" cells per spatial dimension.  There are also "NG" number of ghost cells per boundary that are used
+to implement the boundary conditions.  Thus, the absolute total number of cells stored in memory in a domain is
+
+NTOT = N1TOT * N2TOT * N3TOT = (N1+2*NG)*(N2+2*NG)*(N3+2*NG)
+
+Each of these variables is defined in decs.h. 
+
+In order to tell harm3d to use more than one core, execute it ala 
+
+
+  ./harm3d "Nx1" "Nx2" "Nx3" "N1" "N2" "N3" 
+
+
+Where Nx1-3  are integers representing the number of segments per dimension over the global domain. 
+E.g., 
+
+  ./harm3d "32" "4" "2" "32" "32" "32"
+
+
+would use Ncpus = 32*4*2 = 256 cores, would segment the X1 dimension
+32 times, the X2 dimension 4 times and the X3 dimension 2 times, with
+each block being 32^3 in dimension.  Remember that each will have N1 x
+N2 x N3 physical domains, so the total global number of cells is
+
+N1TOT*Nx1  * N2TOT*Nx2  * N3TOT*Nx3
+
+A single core run is executed like so:
+
+./harm3d "1" "1" "1"  "32" "32" "32"
+
+Each processor/core executes the same bodies of code as the others, except for 
+two exceptions:  1) the master node often does extra tasks,  2) the particular boundary conditions (BCs) 
+may be different (e.g., one core may have 4 MPI BCs and two physical BCs).
+
+The code is currently configured to run parallel jobs.  To change it to serial mode, you will need to do the following:
+
+ 1)  In "decs.h" , change
+
+        #define USEMPI          (1)
+    to 
+        #define USEMPI          (0)
+
+
+ 2) In "makefile", change 
+
+         USEMPI = 1
+    to 
+         USEMPI = 0
+
+Also, you will likely have to change N1,N2,N3 to reflect the domain decomposition you desire. 
+The code should then be executable on the homewood cluster.
+
+There are various initial data files, each named  "init.*.c".  If the user wants
+to use the initial data described by "init.torus.c" for instance, then 
+he/she needs to :
+
+        (replace init*.c in "makefile" with init.torus.c )
+        prompt>  make clean
+        prompt>  make
+
+-------------------------------------------------------------------------------------------------------------------------
+
+The output takes the form of full 3d simulation dumps of the primitive
+variables stored in files called (for example) "KDHARM0.NNNNNN.h5" (if
+MAKE_HDF5 is set to "1" in decs.h) and history data stored in
+"KDHARM0.history.h5" (if MAKE_HISTORY is set).  Here, "NNNNNN" stands
+for a number that is the time index for that dump file.  There are
+also "radflux" 3d dumps named "KDHARM0.RADFLUX.NNNNNN.h5" (if
+MAKE_RADFLUX is set), which are often set to be dumped more frequently
+and contain only those quantities needed to perform bolometric
+ray-tracing of the simulation afterward.  The "history" file,
+KDHARM0.history.h5, contains various quantities integrated over
+spherical shells written at a higher frequency in time; for further
+information, please consult the comments in "dump_history.c."  Note
+that these files use HDF5 libraries, specifically HDF5 v. 1.6.5 and
+not HDF5 v. 1.8 .  The interval between dumps of various types is
+controlled by DT_out[] specified in init*.c.  Meaning of its indices
+are given in decs.h:
+
+#define OUT_HISTORY (0)
+#define OUT_ASCII   (1)
+#define OUT_SDF     (2)
+#define OUT_HDF5    (3)
+#define OUT_IMAGE   (4)
+#define OUT_STAT    (5)
+#define OUT_STAT2   (6)
+#define OUT_RADFLUX (7)
+#define OUT_RESTART (8)
+#define OUT_INIT    (9)
+#define OUT_EVERY   (10)
+#define OUT_FINAL   (11)
+
+where, e.g.,  OUT_HISTORY refers to the history dumps, and OUT_HDF5 refers
+to the full 3d grid function dumps.   OUT_RESTART refers to the check point
+dump frequency.  The check point files are named "rdump_0.*.h5"  and "rdump_1.*.h5", 
+so there are always two sets of checkpoint files, each at different times.  The 
+frequency of the restart dumps is given in "n_restart", which is equal to the number
+of timesteps between restart dumps.  Note that DT_out[] does not control the 
+restart dump frequency.  For our production level jobs, you should use the setup specified 
+in the code as it now stands. 
+
+(NOTE THAT 3-D DUMP FILES ARE NOW MERGED VIA MPI DURING THE
+SIMULATION, THIS IS FOR OLDER VERSION OF HARM3D): 
+For MPI runs, there will be files "KDHARM0.NNNNNN.pMMMMM.h5" where
+MMMMM = 00000, 00001, ..., 00100 say for a run with 100 cores, and
+NNNNNN is like before.  That is, each core will have its own set of
+dump files.  These dump files need to be merged into one dump file.
+I've written a C program called "hdf5_merge.c", and a script
+"merge_all" that uses this program for a run's worth of dump files.
+These programs are in "harm3d/bin".  Note, that I've found it useful
+to "split" this script into two, one that merges the radflux files and
+another that merges the dumps and stat files.  These two scripts would
+then be run simultaneously.  Also, please be careful when using these
+scripts as they move around a lot of data.  If you have any questions
+about what they do, please let me know.
+
+------------------------------------------------------------------------------------------------------------------------
+
+Most clusters use "queues" to manage jobs.  It's a system in which a user submits a job for execution, depending on 
+the waiting list or queue, the job will wait in the queue until its time.  Each cluster has its own priority 
+settings.  Sometimes larger jobs are given priority, or a simple "time-in-queue" algorithm is used.  The Homewood
+cluster, for instance, gives priority to those below their assigned usage share (aka how much cluster time they've used in 
+their assigned budget).  A popular queue system is called PBS.  In order to use a queue system, you will need to use a 
+queue script.  I've included a few example scripts in  "harm3d/queue_scripts" that should work on the named cluster, e.g., 
+"my_pbs.kraken" is for use on the Kraken cluster).  Each cluster has its own PBS settings, so please refer to its
+documentation for the meaning of the settings at the top of each script.   Also, please let me know if you have 
+any questions.  
+
+The basic flow of operations is the following:
+
+1) compile the code and move the executable and the job script to the execution directory.  e.g., 
+     cd /lustre/scratch/$USER/harm3d_test  
+    on Kraken, where $USER is a system variable representing your username (which will be automatically filled 
+    in by the system), and "harm3d_test" is just an example name that I used, you can use another that reflects
+    the purpose of the run (e.g., thin_a=0.9)
+
+2) submit the job: 
+
+    qsub my_pbs.kraken  
+ 
+     (where my_pbs.kraken is your queue script for this particular job)
+    Note that you will have to change the script for your particular run. It sets the number of domains, cores, 
+    length of run, etc. 
+
+3) After the run is done, there are data files that will be needed for the next run, and others you should 
+   move out of run's directory in order to prevent harm3d from overwriting it.  So, you need to do the following:
+   (assuming you're in the run's directory and assuming that harm3d's bin directory is located ~/harm3d-bin/bin , where
+    you've already compiled the programs)
+
+   a) Do:
+      prompt> ~/harm3d-bin/bin/merge_all  run0  
+     (where "run0" is the name of the directory that will be made and where the run's data will be moved to.  
+      this will move the overwritable files, KDHARM0_ener.out and  KDHARM0_stat.out, to the run's directory, 
+      and merge most of the dumps and move them to run0)
+
+   b) Do: (FOR OLD VERSIONS OF HARM3D)
+      prompt> ~/harm3d-bin/bin/merge_all2  run0  
+     (to start merging the radflux dumps and move them to "run0")
+
+   c) (OFTEN THE QUEUE SCRIPT DOES THIS FOR YOU, SEE THE BLUEWATERS SCRIPT "my_pbs.bw-mon-next") 
+      Find the latest set of rdump_0.h5  or  rdump_1.h5  file to start the next run with.  Make sure that they 
+       are all the same size (a good indication that they were successfully written), and make sure that you can 
+       open them, e.g. 
+
+       prompt>  h5ls rdump_0.h5
+
+      should return with a brief description of its contents.  You must have KDHARM0.history.h5 in the run's directory 
+      when restarting the run if you are writing history data.   
+
+   d) Do:
+      prompt> qsub my_pbs   (to restart the run again, no need to change the queue script)
+
+
+(FOR OLD VERSIONS OF HARM3D) Also, I usually start a "sh" shell and execute these scripts   ala  
+
+sh-prompt>    nohup ./merge_all   run0  > out-merge1.dat  2>&1   &
+sh-prompt>    nohup ./merge_all2  run0  > out-merge2.dat  2>&1   &
+
+There are scripts in ./queue_scripts that streamline this process more, depending on the cluster.  You may have to 
+modify one of these scripts to make it compatible with a new cluster.  For examples, see:
+./queue_scripts/ranger/pbs_merge.ranger 
+./queue_scripts/bluesky/mymerge_dumps.sub
+
+Also, after merging the dumps and while you are copying the data to gauss, you may want to store the data on the 
+cluster's long-term storage system (e.g., "ranch" at TACC, "hsi" at NICS).  It is a good idea to store the code along with the 
+data, so you know exactly what configuration/parameters/etc you used to generate that simulation. 
+
+--------------------------------------------------------------------------------------------------------------------------
+
+Different make options for different clusters are given in "makefile".  A cluster's options may be selected by changing 
+
+USECLUSTER = 5
+
+to a different number, the cluster's number is noted in the comments of "makefile". 
+
+You may also select the compiler with the "COMPILER" variable.  
+
+--------------------------------------------------------------------------------------------------------------------------
+
+For runs with axi-symmetric spacetimes, I usually use a 2d-version of the gdump file and then change a few parameters in it.  
+My IDL scripts *should* handle both 2d axi-symmetric geometry and full 3d geometry. Specifically, I do the following:
+
+1) (generate gdump file on a single processor with the same N1 and N2 as the 3d run);
+
+2) (change the included script "make_3d_gdump" so that it has the appropriate values for dx3, startx3, totalsize3)
+
+3) prompt>  make_3d_gdump  <gdump-file-name>
+
+3D gdump files are huge, so I usually set MAKE_GDUMP=0 for production runs.  
+
+
+Note that you need a "-r" flag when using hdf5_merge on  "gdump", "radflux", and "stat" type dumps  (see merge_all).
+
+You may have noticed that you need to restart an MPI run with the same number of rdump_start.p*.h5 files as cores.  Sometimes 
+you may change the number of cores from one restart/checkpoint to the next.  In order to do this, simply 
+merge the desired set of rdump files with hdf5_merge, then use "hdf5_decomp.c" to generate the set 
+of rdump_start.p* files corresponding to your new domain decomposition.  Please see the documentation of hdf5_decomp.c for more
+information. 
+
+
+------------------------------------------------------------------------------------------
+
+Once you have merged the dumps, you may begin copying the data to gauss.  I use "rsync" via an alias :
+
+alias myrsync 'rsync -av --progress --partial '
+
+so 
+
+prompt>  myrsync  "*.h5"  gauss:~/tmp  
+
+  would copy all the *.h5 files from the local machine (presumably kraken) to gauss at ~/tmp.   Please see rsync's man page
+for information about the options I use. There are two large partitions where we store data on gauss, but you should 
+probably store the new data here:
+
+
+gauss:/data1/gauss_new/harm3d/archive/3d/cooling 
+
+in sub-directories with names that follow our existing convention (e.g., "a=0.9", "a=0.5"). 
+
+------------------------------------------------------------------------------------------
+
+For sifting through the code, I have a few useful aliases (note that I use tcsh, so you may have to change
+their definitions for your desired shell):
+
+alias fscvar 'grep -n "[^[:alnum:]_]\!*[^[:alnum:]_]" *.f *.inc *.f90 *.fortran *.for *.c *.h'
+alias rscvar 'fscvar \!* | egrep  "void |int |float |double "'
+
+"fscvar" finds all instances of a valid c (or fortran) variable (given as a command-line argument) 
+         in c/fortran source files in the working directory. 
+"rscvar" finds all definitions of a given variable in c/fortran source files in the working directory. 
+
+E.g.,  in ./harm3d 
+
+prompt>  fscvar gcov_func
+metric.c:113:      gcov (ala gcov_func() ) : 
+metric.c:129:   void gcov_func(double *x, double gcov[][NDIM]) ;
+metric.c:136:           gcov_func(xp_h,gh) ;
+metric.c:137:           gcov_func(xp_l,gl) ;
+metric.c:1214: gcov_func():
+metric.c:1224:void gcov_func(double *xp, double gcov[][NDIM]) 
+metric.c:1251:  fprintf(stderr,"gcov_func():  Invalid value for METRIC_TYPE_CHOICE : %d \n", 
+metric.c:1401:    fprintf(stderr,"gcov_func():  Invalid value for METRIC_TYPE_CHOICE : %d \n",
+
+
+prompt>  rscvar gcov_func
+metric.c:129:   void gcov_func(double *x, double gcov[][NDIM]) ;
+metric.c:1224:void gcov_func(double *xp, double gcov[][NDIM]) 
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+
+
