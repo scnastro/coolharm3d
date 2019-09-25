@@ -570,6 +570,12 @@ void set_initial_globals(void)
 	
   n_r_bins = n_phi_bins = 0; 
 
+  min_Dt_IC_cool = 1.0e3;
+
+  corona_func_first_time = 3;
+
+  fprintf(stdout, "UUMIN = %e\n", UUMIN); fflush(stdout);
+
   return;
 }
 

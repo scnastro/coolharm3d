@@ -469,6 +469,8 @@ extern double E_tot;  /* E_tot =   \int_{domain}  T^t_t \sqrt{-g} dx^4  */
 extern double M_tot;  /* M_tot =   \int_{domain}  rho   \sqrt{-g} dx^4  */
 extern double L_tot;  /* L_tot =   \int_{domain}  T^t_t \sqrt{-g} dx^4  */
 extern double *coolflux[NDIM];
+extern double min_Dt_IC_cool;
+extern int corona_func_first_time;
 extern double initial_bbh_separation;  /* initial separation of binary black hole (in units of m_bh1+m_bh2) */
 extern double m_bh1;                   /* mass of BH1 (left BH)  */
 extern double m_bh2;                   /* mass of BH2 (right BH) */
@@ -818,7 +820,7 @@ extern int check_gamma(double gamma);
 extern void fixup_gamma(double *pv, double *gamma);
 extern int check_Tmax(double *pv);
 extern void fixup_Tmax(double *pv);
-extern int check_entropy_eq(double uu, double bsq, double rho );
+extern int check_entropy_eq(double th, double uu, double bsq, double rho );
 extern int fixup_entropy_eq(int i, int j, int k, double *prim_old, double *prim, struct of_geom *geom, struct of_geom *geom_old, double *gamma_out);
 extern void set_Katm( void );
 

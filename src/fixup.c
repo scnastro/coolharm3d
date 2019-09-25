@@ -112,8 +112,8 @@ void fixup_floor(double *pv, struct of_coord *coords)
   unsigned short int ret = 0;
 
 #if( !ALLOW_NEGATIVE_DENSITIES ) 
-  if( pv[RHO] < coords->rhoflr )  {  pv[RHO] = coords->rhoflr;  ret = 1;  }    
-  if( pv[ UU] < coords->uuflr  )  {  pv[ UU] = coords->uuflr ;  ret = 1;  }    
+  if( pv[RHO] < coords->rhoflr )  {  pv[RHO] = coords->rhoflr;  /* fprintf(stdout, "rho floor reached\n"); fflush(stdout); */ ret = 1;  }    
+  if( pv[ UU] < coords->uuflr  )  {  pv[ UU] = coords->uuflr ;  /* fprintf(stdout, "uu floor reached\n");  fflush(stdout); */ ret = 1;  }    
   if( ret                      )  {  fail(FAIL_FLOOR,0);                  }
 #endif
 
@@ -310,10 +310,11 @@ void fixup_global(double ****prim )
    -- this routine should be called before p_L,p_R,F[] are written over;
 
 ******************************************************************************************/
-int check_entropy_eq(double uu, double bsq, double rho )
+int check_entropy_eq(double th, double uu, double bsq, double rho)
 {
-#if( USE_ENTROPY_EQ ) 
-  return( (uu < BETA_MIN * bsq ) || (rho < BETA_MIN * bsq ) ); 
+#if( USE_ENTROPY_EQ )
+//return( (th <= M_PI/6.0) || (th >= (5.0/6.0)*M_PI) || (uu < BETA_MIN * bsq) || (rho < BETA_MIN * bsq) ); 
+  return( (uu < BETA_MIN * bsq) );
 #else
   return(0);
 #endif

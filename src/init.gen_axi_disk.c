@@ -133,7 +133,7 @@ void init_base(void)
 	/**************************************************************************
           Length of each dimension : 
 	**************************************************************************/
-	GridLength[0] = 30000. ;         /* Length of X0 dimension (evolution period) */ 
+	GridLength[0] = 20000. ;         /* Length of X0 dimension (evolution period) */ 
 #if( COORD_TYPE_CHOICE == COORD_IDENTITY )
 	GridLength[1] = Rout-Rin  ;   /* Length of X1 dimension */ 
 	GridLength[2] = th_length ;   /* Length of X2 dimension */ 
@@ -223,6 +223,7 @@ void init_base(void)
 
 	//	dx[0] = cour * dt_global_min; /* Discretization size in X0 direction, time step*/
 
+	
 	/**************************************************************************
 	  Print out basic grid parameters: 
 	**************************************************************************/
@@ -412,14 +413,14 @@ void set_special_coord(void)
 
 #else 
   /* Single BH Parameters: */
-  a = 0.5; 
+  a = 0.; 
   asq = a*a;
   r_isco    = risco_calc(1);
   r_horizon = rhorizon_calc(1);
   R0       = 0.;             /* Offset in Radius from 1.   (HARM-like)         */
   //  R0       = 0.9*r_horizon;  /* Offset in Radius from 1.  (GRMHD-like)       */
   Rout     = 70.;         /* Radial extent of the grid           */
-  n_within_horizon = 5;   /* number of cells within horizon */
+  n_within_horizon = 25;   /* number of cells within horizon */
   Rin       = Rin_calc();
 
   r_horizon1 = r_horizon2 = r_horizon;

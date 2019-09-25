@@ -209,7 +209,7 @@
 
 /* Option to use the entropy evolution equation instead of total energy equation */ 
 #define USE_ENTROPY_EQ   (1)       /* Whether to ever use entropy equation */
-#define BETA_MIN         (1.e-2)   /* use EE fix when u < BETA_MIN * bsq */
+#define BETA_MIN         (0.01)   /* use EE fix when u < BETA_MIN * bsq */
 
 
 #define KEEP_CONSERVED_VARS (0)  /* Whether to keep U[] around for next timestep */  //--BROKEN CODE WILL SEGFAULT
@@ -230,14 +230,17 @@
 
 /* Depending on different floor types, set the magnitude and scaling of the floor : */
 #if( FLOOR_TYPE_CHOICE == FLOOR_STATIC ) 
-#define RHOMIN      (2.e-10)    /* Floor on rest-mass density */
-#define UUMIN       (2.e-12)    /* Floor on internal energy density */
+#define RHOMIN      (2.e-15)    /* Floor on rest-mass density */
+//#define RHOMIN      (2.e-20)    /* Floor on rest-mass density */
+#define UUMIN       (2.e-26)    /* Floor on internal energy density */
+//#define UUMIN       (2.e-20)    /* Floor on internal energy density */
 //#define RHOMIN      (5.e-11)   /* Floor on rest-mass density */
 //#define UUMIN       (6.e-16)   /* Floor on internal energy density */
 #define RHOMINLIMIT (1.e-30)   /* Used for r-dep. floor, abs. min. of RHOMIN */
-#define UUMINLIMIT  (1.e-30)   /* Used for r-dep. floor, abs. min. of RHOMIN */
+#define UUMINLIMIT  (1.e-39)   /* Used for r-dep. floor, abs. min. of RHOMIN */
 #define RHOPOWER    (-1.5)     /* Power in power-law that rho in floor follows  */
-#define UUPOWER     (-2.5)     /* Power in power-law that uu in floor follows  */
+//#define UUPOWER     (-2.5)     /* Power in power-law that uu in floor follows  */
+#define UUPOWER     (-1.5)     /* Power in power-law that uu in floor follows  */
 #define FLOOR_DIM   (COORD_RADIUS_DIM)  /* Dimensionality of floor grid array */
 
 #elif( FLOOR_TYPE_CHOICE == FLOOR_FLAT ) 

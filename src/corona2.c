@@ -29,15 +29,14 @@
 #define MAX_OPTICAL_DEPTH  (1.)
 #define SMOOTH_FLUX (0)
 #define FRAC_COARSEN_PHI (8)
-#define FRAC_COARSEN_RAD (8)
+#define FRAC_COARSEN_RAD (6)
 
 #define PHI_WEDGE_LOOP    for( iwedge=0; iwedge < n_phi_wedges; iwedge++ )
 
 // definitions needed for coolfunc table usage
 #define NUM_A  (301)
 #define NUM_B  (301)
-#define NUM_C  (71)
-#define CF_FILE "/mnt/c/scratch/sciteam/kinch/a0run/src-new6-4/coolfunc_table_ch.h5"
+#define CF_FILE "/mnt/c/scratch/sciteam/kinch/a0run/src/coolfunc_table.h5"
 
 /* variable for the grid that holds the photospheric data: */
 int  ip, kp, np, ifunc, iwedge; 
@@ -92,7 +91,10 @@ void  setup_corona_cooling2( double ****prim, double Dt)
   char strout[200];
 
   /* Constants : */
-  double  eta                = 0.06;
+  double  eta                = 0.0572; // a = 0
+//double  eta                = 0.0821; // a = 0.5
+//double  eta                = 0.1558; // a = 0.9
+//double  eta                = 0.2640; // a = 0.99
   double  mOBS               = 10.*C_mSUN;; 
   double  mdotNUM            = 3.e-4; 
   double  mdot_frac          = 1.e-2;
@@ -296,7 +298,8 @@ void  setup_corona_cooling2( double ****prim, double Dt)
 #if( TESTING )
     bound = 1.;
 #else
-    bound = (  (q.ucov[0]*( q.p + prim_loc[UU] + prim_loc[RHO] + q.bsq ))  >  (-prim_loc[RHO]) ) ?  1 : 0 ;
+//  bound = (  (q.ucov[0]*( q.p + prim_loc[UU] + prim_loc[RHO] + q.bsq ))  >  (-prim_loc[RHO]) ) ?  1 : 0 ;
+    bound = 1.0;
 #endif
 
     //    dth = sqrt(geom->gcov[TH][TH]) * dx[TH] * lengthScale; 
@@ -717,16 +720,19 @@ void  setup_corona_cooling2( double ****prim, double Dt)
 
   double A_grid[NUM_A];
   double B_grid[NUM_B];
-  double C_grid[NUM_C];
-  double th_e_table[NUM_A*NUM_B*NUM_C];
+  double th_e_table[NUM_A*NUM_B];
 
+  double A, B;
   double mean_E;
-  int n_bad;
+  int A_ndx, B_ndx, n_bad;
   double a, b, dt;
+  double new_Dt_IC_cool;
   double ucon[NDIM];
+  double tmp_cool_frac;
 
 #define N_READ_MAX_TRIES (100)
 
+  /*
   file_id = H5Fopen(CF_FILE, H5F_ACC_RDONLY, H5P_DEFAULT);
   while (file_id < 0) { file_id = H5Fopen(CF_FILE, H5F_ACC_RDONLY, H5P_DEFAULT);  }
 
@@ -745,13 +751,6 @@ void  setup_corona_cooling2( double ****prim, double Dt)
   }
 
   n_bad = 0; 
-  while( (H5LTread_dataset( file_id, "/C_grid" ,  H5T_NATIVE_DOUBLE, C_grid ) < 0) &&  (n_bad < N_READ_MAX_TRIES) ) { n_bad++; }
-  if( n_bad >= N_READ_MAX_TRIES ) { 
-    fprintf(stdout,"%s() %d %d %d : line %d : too many read attempts \n",__func__,myid,nstep,n_substep, __LINE__); 
-    fflush(stdout); fail(FAIL_HDF,0);
-  }
-
-  n_bad = 0; 
   while( (H5LTread_dataset( file_id, "/th_e" ,  H5T_NATIVE_DOUBLE, th_e_table ) < 0) &&  (n_bad < N_READ_MAX_TRIES) ) { n_bad++; }
   if( n_bad >= N_READ_MAX_TRIES ) { 
     fprintf(stdout,"%s() %d %d %d : line %d : too many read attempts \n",__func__,myid,nstep,n_substep, __LINE__); 
@@ -759,10 +758,13 @@ void  setup_corona_cooling2( double ****prim, double Dt)
   }
 
   while (H5Fclose(file_id) < 0) { ; } 
+  */
 
 #undef N_READ_MAX_TRIES 
     
     // end of coolfunc table read-in block
+
+  min_Dt_IC_cool = 1.0e3;
 
   l = 0 ; 
   LOOP { 
@@ -882,16 +884,38 @@ void  setup_corona_cooling2( double ****prim, double Dt)
 
       if( urad > 0. ) {
 	prim_loc = prim[i][j][k];
-	rho      = prim_loc[RHO]; 
-	pgas     = (gam-1.)*prim_loc[UU];
+	rho   = prim_loc[RHO]; 
+	pgas  = (gam-1.)*prim_loc[UU];
+	
+	A     = pgas/rho;
+//  A_ndx = (int)(log(A/A_grid[0])/log(A_grid[1]/A_grid[0])); 
+	B     = urad/rho;
+//  B_ndx = (int)(log(B/B_grid[0])/log(B_grid[1]/B_grid[0]));
+
+    /*
+	if (A_ndx < 0) {
+	  A_ndx = 0;
+	  printf("A_ndx < 0\n");
+	}
+	else if (A_ndx >= NUM_A-2) {
+	  A_ndx = NUM_A-2;
+	  printf("A_ndx > NUM_A-2: %e\n", log10(A));
+	}
+	if (B_ndx < 0) {
+	  B_ndx = 0;
+	  printf("B_ndx < 0\n");
+	}
+	else if (B_ndx >= NUM_B-2) {
+	  B_ndx = NUM_B-2;
+	  printf("B_ndx > NUM_B-2\n");
+	}
 	
 	//	printf("%d %d\n", A_ndx, B_ndx);
+    */
 
 //	Theta_e = (1.0/((A_grid[A_ndx+1] - A_grid[A_ndx])*(B_grid[B_ndx+1] - B_grid[B_ndx]))) * (th_e_table[A_ndx*NUM_B + B_ndx]*(A_grid[A_ndx+1] - A)*(B_grid[B_ndx+1] - B) + th_e_table[(A_ndx+1)*NUM_B + B_ndx]*(A - A_grid[A_ndx])*(B_grid[B_ndx+1] - B) + th_e_table[A_ndx*NUM_B + B_ndx+1]*(A_grid[A_ndx+1] - A)*(B - B_grid[B_ndx]) + th_e_table[(A_ndx+1)*NUM_B + B_ndx+1]*(A - A_grid[A_ndx])*(B - B_grid[B_ndx]));
 
-    Theta_e = trilin_interp(pgas/rho, urad/rho, 3.832 * ((c4_corona * mean_E)/urad), A_grid, B_grid, C_grid, th_e_table);
-
-//  Theta_e = (1.0/(1.0 + n_elec_per_H)) * A * (C_mp/C_me);
+	Theta_e = (1.0/(1.0 + n_elec_per_H)) * A * (C_mp/C_me);
 	
 	//	printf("%e\n", 511.0 * Theta_e);
 	kT_e    = (C_me/C_mp) * Theta_e;
@@ -902,16 +926,55 @@ void  setup_corona_cooling2( double ****prim, double Dt)
 
 	//--orig cool0 = cool2 = c1_corona * rho * Te * urad * ( 1. + c3_corona*Te );
 //  cool0 = cool2 = c1_corona * rho * kT_e * urad * ( 1. + 4.*Theta_e );
-    cool0 = cool2 = c1_corona * rho * kT_e * urad * ( 1. + 4.*Theta_e ) - 0.25 * (C_me/C_mp) * c1_corona * rho * urad * 3.832 * ((c4_corona * mean_E)/urad);
 
-    /*
+//  fprintf(stdout, "T_c = %e\n", 511.0 * ((0.25 * 3.832 * c4_corona * mean_E)/urad)); fflush(stdout);
+
     get_geometry(i,j,k,CENT,ncurr,geom);
     ucon_calc(prim_loc, geom, ucon);
-    dt = Dt/ucon[0];
-    a  = (1.0/(1.0 + n_elec_per_H)) * c1_corona * (gam - 1.0) * urad;
-    b  = ((4.0/(1.0 + n_elec_per_H)) * (gam - 1.0) * (C_mp/C_me) * prim_loc[UU])/rho;
-    cool0 = cool2 = (prim_loc[UU]/dt) * (1.0 - 1.0/((1.0 + b)*exp(a*dt) - b));
-    */
+    get_state(prim_loc, geom, &q);
+
+    if (check_entropy_eq(coords->x[TH], prim_loc[UU], q.bsq, rho)) {
+        cool0 = cool2 = 0.0;
+    } else if (q.bsq/rho > 1.0) {
+        cool0 = cool2 = 0.0;
+    } else if (coords->r <= 2.0) {
+        cool0 = cool2 = 0.0;
+    } else if (Theta_e < (0.25 * 3.832 * c4_corona * mean_E)/urad) {
+//      fprintf(stdout, "below T_c, not cooling\n"); fflush(stdout);
+        cool0 = cool2 = 0.0;
+    } else if (prim_loc[UU] < 10.0*(coords->uuflr)) {
+//      fprintf(stdout, "too close to floor, not cooling\n"); fflush(stdout);
+        cool0 = cool2 = 0.0;
+    } else {
+        dt = Dt/ucon[0];
+        a  = (1.0/(1.0 + n_elec_per_H)) * c1_corona * (gam - 1.0) * urad;
+        b  = ((4.0/(1.0 + n_elec_per_H)) * (gam - 1.0) * (C_mp/C_me) * prim_loc[UU])/rho;
+        tmp_cool_frac = (1.0 - 1.0/((1.0 + b)*exp(a*dt) - b));
+        if (tmp_cool_frac < 0.0) {
+            tmp_cool_frac = 0.0;
+        } else if (tmp_cool_frac > 1.0) {
+            tmp_cool_frac = 1.0;
+        }
+        cool0 = cool2 = (prim_loc[UU]/dt) * tmp_cool_frac;
+        new_Dt_IC_cool = ucon[0] * (1.0/a) * log((1.582 + b)/(1.0 + b));
+        if (new_Dt_IC_cool < min_Dt_IC_cool) {
+            min_Dt_IC_cool = new_Dt_IC_cool;
+        }
+        if (prim_loc[UU] - cool2*dt < (C_me/C_mp) * (1.0 + n_elec_per_H) * rho * ((0.25 * 3.832 * c4_corona * mean_E)/urad)) {
+            cool0 = cool2 = (prim_loc[UU] - (C_me/C_mp) * (1.0 + n_elec_per_H) * rho * ((0.25 * 3.832 * c4_corona * mean_E)/urad))/dt;
+            if (cool2 < 0.0) {
+                cool0 = cool2 = 0.0;
+            }
+//          fprintf(stdout, "cooling to T_c engaged\n"); fflush(stdout);
+        }
+        if (prim_loc[UU] - cool2*dt < coords->uuflr) {
+            cool0 = cool2 = (prim_loc[UU] - coords->uuflr)/dt;
+            if (cool2 < 0.0) {
+                cool0 = cool2 = 0.0;
+            }
+//          fprintf(stdout, "cooling to floor engaged\n"); fflush(stdout);
+        }
+    }
       }
     }
 
@@ -994,7 +1057,9 @@ void  setup_corona_cooling2( double ****prim, double Dt)
     
     l++;
   }
-  
+
+//  corona_func_first_time++;
+
 #if(0)  
   int ktmp = 32 - globalpos[3];  /* here the number is the "global iphi" to print */
   int phtmp = ktmp + N3S; 
@@ -1242,65 +1307,3 @@ void  free_photosphere_arrays(void)
   
   return;
 }
-
-double trilin_interp(double A, double B, double C, double *A_grid, double *B_grid, double *C_grid, double *th_e_table) {
-    int A_ndx, B_ndx, C_ndx;
-    double x0, x1, y0, y1, z0, z1, c000, c001, c010, c011, c100, c101, c110, c111, a0, a1, a2, a3, a4, a5, a6, a7;
-
-	A_ndx = (int)(log(A/A_grid[0])/log(A_grid[1]/A_grid[0])); 
-	B_ndx = (int)(log(B/B_grid[0])/log(B_grid[1]/B_grid[0]));
-	C_ndx = (int)(log(C/C_grid[0])/log(C_grid[1]/C_grid[0]));
-	
-	if (A_ndx < 0) {
-	  A_ndx = 0;
-	  printf("A_ndx < 0\n");
-	}
-	else if (A_ndx >= NUM_A-2) {
-	  A_ndx = NUM_A-2;
-	  printf("A_ndx > NUM_A-2: %e\n", log10(A));
-	}
-	if (B_ndx < 0) {
-	  B_ndx = 0;
-	  printf("B_ndx < 0\n");
-	}
-	else if (B_ndx >= NUM_B-2) {
-	  B_ndx = NUM_B-2;
-	  printf("B_ndx > NUM_B-2\n");
-	}
-	if (C_ndx < 0) {
-	  C_ndx = 0;
-	  printf("C_ndx < 0\n");
-	}
-	else if (C_ndx >= NUM_C-2) {
-	  C_ndx = NUM_C-2;
-	  printf("C_ndx > NUM_C-2\n");
-	}
-
-    x0 = A_grid[A_ndx];
-    x1 = A_grid[A_ndx+1];
-    y0 = B_grid[B_ndx];
-    y1 = B_grid[B_ndx+1];
-    z0 = C_grid[C_ndx];
-    z1 = C_grid[C_ndx+1];
-
-    c000 = th_e_table[(A_ndx)*(NUM_B*NUM_C)   + (B_ndx)*NUM_C   + (C_ndx)];
-    c001 = th_e_table[(A_ndx)*(NUM_B*NUM_C)   + (B_ndx)*NUM_C   + (C_ndx+1)];
-    c010 = th_e_table[(A_ndx)*(NUM_B*NUM_C)   + (B_ndx+1)*NUM_C + (C_ndx)];
-    c011 = th_e_table[(A_ndx)*(NUM_B*NUM_C)   + (B_ndx+1)*NUM_C + (C_ndx+1)];
-    c100 = th_e_table[(A_ndx+1)*(NUM_B*NUM_C) + (B_ndx)*NUM_C   + (C_ndx)];
-    c101 = th_e_table[(A_ndx+1)*(NUM_B*NUM_C) + (B_ndx)*NUM_C   + (C_ndx+1)];
-    c110 = th_e_table[(A_ndx+1)*(NUM_B*NUM_C) + (B_ndx+1)*NUM_C + (C_ndx)];
-    c111 = th_e_table[(A_ndx+1)*(NUM_B*NUM_C) + (B_ndx+1)*NUM_C + (C_ndx+1)];
-
-    a0 = -(c000 * x1 * y1 * z1) + (c001 * x1 * y1 * z0) + (c010 * x1 * y0 * z1) - (c011 * x1 * y0 * z0) + (c100 * x0 * y1 * z1) - (c101 * x0 * y1 * z0) - (c110 * x0 * y0 * z1) + (c111 * x0 * y0 * z0);
-    a1 = (c000 * y1 * z1) - (c001 * y1 * z0) - (c010 * y0 * z1) + (c011 * y0 * z0) - (c100 * y1 * z1) + (c101 * y1 * z0) + (c110 * y0 * z1) - (c111 * y0 * z0);
-    a2 = (c000 * x1 * z1) - (c001 * x1 * z0) - (c010 * x1 * z1) + (c011 * x1 * z0) - (c100 * x0 * z1) + (c101 * x0 * z0) + (c110 * x0 * z1) - (c111 * x0 * z0);
-    a3 = (c000 * x1 * y1) - (c001 * x1 * y1) - (c010 * x1 * y0) + (c011 * x1 * y0) - (c100 * x0 * y1) + (c101 * x0 * y1) + (c110 * x0 * y0) - (c111 * x0 * y0);
-    a4 = -(c000 * z1) + (c001 * z0) + (c010 * z1) - (c011 * z0) + (c100 * z1) - (c101 * z0) - (c110 * z1) + (c111 * z0);
-    a5 = -(c000 * y1) + (c001 * y1) + (c010 * y0) - (c011 * y0) + (c100 * y1) - (c101 * y1) - (c110 * y0) + (c111 * y0);
-    a6 = -(c000 * x1) + (c001 * x1) + (c010 * x1) - (c011 * x1) + (c100 * x0) - (c101 * x0) - (c110 * x0) + (c111 * x0);
-    a7 = c000 - c001 - c010 + c011 - c100 + c101 + c110 - c111;
-
-    return (a0 + (a1 * A) + (a2 * B) + (a3 * C) + (a4 * A * B) + (a5 * A * C) + (a6 * B * C) + (a7 * A * B * C))/((x0 - x1)*(y0 - y1)*(z0 - z1));
-}
-

@@ -220,7 +220,7 @@ void step_ch(void)
 	
 	/* Calculate what the next time interval should be : */ 
 	dt_old = dx[0]; 
-	dx[0]  = timestep(); 
+	dx[0]  = timestep();
 
 	BEG_TIMING(TIMER_TYPE_METRIC);
 	advance_geometry();  /* Read in the geometry for the next temporal substep (the present one is already set) */
@@ -261,7 +261,6 @@ void advance(
 	struct of_coord *coords;
 
   TRACE_BEG;
-
 
 #if( NO_EVOLUTION )
 	return;
@@ -614,6 +613,11 @@ static double timestep(void)
   /* don't step beyond end of run */
   if(t + dtt > (GridLength[0]+startx[0]) )  dtt = GridLength[0] + startx[0] - t ;
 
+  if (min_Dt_IC_cool < dtt) {
+      fprintf(stdout, "min_Dt_IC_cool = %e < dtt\n", min_Dt_IC_cool); fflush(stdout);
+//    dtt = min_Dt_IC_cool;
+  }
+
   /* Get the smallest dt over all domains (to eliminate the possibility of differences at round-off level): */
   mpi_global_min( &dtt );
 
@@ -855,7 +859,7 @@ static void recover_primitives(int i, int j, int k, double *pf, double *U,
 #if( FIXUP_TREE == 1 ) 
   /* Check to see if everything is fine: */
   if( !ret ) { 
-    if( !check_entropy_eq(pf[UU],bsq,pf[RHO]) ) { 
+    if( !check_entropy_eq(coords->x[TH],pf[UU],bsq,pf[RHO]) ) { 
       if( !check_floor(pf,coords) ) { 
 	if( !check_Tmax(pf) ) { 
 	  if( !check_gamma(gamma) ) { 
@@ -875,7 +879,7 @@ static void recover_primitives(int i, int j, int k, double *pf, double *U,
 
 #if( (FIXUP_TREE == 2) || (FIXUP_TREE == 3) ) 
 # if( USE_ENTROPY_EQ ) 
-  if( ret  || check_entropy_eq(pf[UU],bsq,pf[RHO]) ) {  use_ee = 1 ; } 
+  if( ret  || check_entropy_eq(coords->x[TH],pf[UU],bsq,pf[RHO]) ) {  use_ee = 1 ; } 
 # endif
 #endif
     
